@@ -7,17 +7,254 @@
 
   <link rel="apple-touch-icon" href="https://i.ibb.co/PvhzpbC7/3.png">
   <link rel="icon" href="https://i.ibb.co/PvhzpbC7/3.png">
-
+  
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="血拼比價王">
 
   <style>
-    body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #f4f4f9; }
-    iframe { border: none; width: 100vw; height: 100vh; display: block; }
+    /* 這裡加入了 100dvh，解決 iOS 鍵盤與工具列跳動問題 */
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 15px; background: #f4f4f9; text-align: center; margin: 0; min-height: 100dvh; box-sizing: border-box; }
+    .card { background: white; border-radius: 15px; padding: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    
+    input[type="file"] { display: none; }
+    .section-title { text-align: left; font-size: 14px; font-weight: bold; color: #555; margin-top: 15px; margin-bottom: 10px; }
+    
+    .camera-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+    .upload-btn { background-color: #e8f0fe; color: #1a73e8; border: 2px dashed #1a73e8; border-radius: 10px; font-size: 14px; font-weight: bold; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 80px; overflow: hidden; background-size: cover; background-position: center; position: relative; }
+    .album-btn { background-color: #fff8e1; color: #f29900; border: 2px dashed #f29900; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 90px; margin-bottom: 20px; overflow: hidden; background-size: cover; background-position: center; position: relative; }
+    
+    .overlay { background: rgba(0,0,0,0.4); color: white; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-shadow: 1px 1px 3px rgba(0,0,0,0.8); }
+    .overlay-album { background: rgba(255, 255, 255, 0.85); color: #e65100; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .divider { margin: 15px 0; color: #bbb; font-size: 12px; display: flex; align-items: center; }
+    .divider::before, .divider::after { content: ''; flex: 1; border-bottom: 1px solid #ddd; margin: 0 10px; }
+    
+    .checkbox-group { text-align: left; background: #fafafa; padding: 15px; border-radius: 10px; border: 1px solid #eee; margin-bottom: 15px; line-height: 2; font-size: 15px; }
+    .checkbox-group label { display: block; cursor: pointer; }
+    
+    .btn-row { display: flex; gap: 10px; margin-top: 15px; }
+    .submit-btn { background: #1a73e8; color: white; border: none; padding: 15px; border-radius: 12px; font-size: 18px; font-weight: bold; flex: 3; }
+    .submit-btn:disabled { background: #ccc; }
+    .action-btn { background: #f1f3f4; color: #555; border: none; padding: 15px; border-radius: 12px; font-size: 16px; font-weight: bold; flex: 1; }
+    .cancel-btn { background: #ea4335; color: white; display: none; flex: 1; border: none; padding: 15px; border-radius: 12px; font-size: 16px; font-weight: bold; }
+    
+    #result { margin-top: 20px; text-align: left; background: #fff; padding: 15px; border-radius: 10px; border: 1px solid #ddd; display: none; font-size: 15px; line-height: 1.6; }
+    #result h3 { color: #333; margin-bottom: 5px; font-size: 16px; border-bottom: 2px solid #f0f0f0; padding-bottom: 5px; margin-top: 15px; }
+    .status { font-size: 13px; color: #666; margin-top: 15px; background: #f9f9f9; padding: 10px; border-radius: 8px; }
+
+    /* --- 新增：超炫酷的載入動畫 (Loading Overlay) --- */
+    #loadingOverlay {
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100dvh; background: rgba(255, 255, 255, 0.9);
+      display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 9999;
+    }
+    .spinner {
+      width: 50px; height: 50px; border: 5px solid #e8f0fe; border-top: 5px solid #1a73e8;
+      border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 15px;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .loading-text { color: #1a73e8; font-weight: bold; font-size: 16px; letter-spacing: 1px; }
   </style>
 </head>
+
 <body>
-  <iframe src="https://script.google.com/macros/s/AKfycbzxQkRTSyY87k4AMkLUDktieW5ts4XJfNsRzmvq7K6rAMCsnovZkN2U2nPzyoGlfp2R/exec" allow="camera; microphone"></iframe>
+  
+  <div id="loadingOverlay">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loadingMsg">🚀 AI 跨國比價中...</div>
+  </div>
+
+  <div class="card">
+    <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 20px; gap: 15px;">
+      <img src="https://i.ibb.co/PvhzpbC7/3.png" onclick="clearAll()" title="點擊重置" style="width: 50px; height: 50px; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); cursor: pointer;">
+      <h2 style="margin: 0; color: #1a73e8; font-size: 24px; letter-spacing: 1px;">血拼比價王</h2>
+    </div>
+    
+    <div class="section-title">📸 1. 上傳商品照片</div>
+    <div class="camera-grid">
+      <label for="pic1" class="upload-btn" id="lbl1"><span>📸<br>拍第 1 張</span></label>
+      <input type="file" id="pic1" accept="image/*" capture="environment" onchange="updateLabel(1)">
+      <label for="pic2" class="upload-btn" id="lbl2"><span>📸<br>拍第 2 張</span></label>
+      <input type="file" id="pic2" accept="image/*" capture="environment" onchange="updateLabel(2)">
+      <label for="pic3" class="upload-btn" id="lbl3"><span>📸<br>拍第 3 張</span></label>
+      <input type="file" id="pic3" accept="image/*" capture="environment" onchange="updateLabel(3)">
+    </div>
+    <div class="divider">或者</div>
+    <label for="albumPics" class="album-btn" id="albumLabel">
+      <span>🖼️ 從相簿選取<br><small style="font-weight:normal; color:#888;">(支援多選)</small></span>
+    </label>
+    <input type="file" id="albumPics" accept="image/*" multiple onchange="updateAlbumLabel()">
+
+    <div class="section-title">💰 2. 手動輸入當地價格 (選填)</div>
+    <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+      <input type="number" id="manualPrice" placeholder="數字,如:5980" style="flex: 1; padding: 12px; border: 2px solid #ddd; border-radius: 10px; font-size: 16px;">
+      <select id="currency" style="padding: 12px; border: 2px solid #ddd; border-radius: 10px; font-size: 16px; background: white; font-weight: bold;">
+        <option value="日幣 (JPY)">🇯🇵 日幣</option>
+        <option value="美金 (USD)">🇺🇸 美金</option>
+        <option value="歐元 (EUR)">🇪🇺 歐元</option>
+        <option value="韓元 (KRW)">🇰🇷 韓元</option>
+        <option value="泰銖 (THB)">🇹🇭 泰銖</option>
+      </select>
+    </div>
+
+    <div class="section-title">🛒 3. 指定比價平台 (可複選)</div>
+    <div class="checkbox-group" style="font-size: 14px;">
+      <label style="border-bottom: 2px solid #ddd; padding-bottom: 8px; margin-bottom: 8px;">
+        <input type="checkbox" id="selectAll" checked onchange="toggleAll()"> <b style="color:#1a73e8;">✔️ 一鍵全選 (含一般電商與藥妝)</b>
+      </label>
+      <div style="color: #d93025; font-weight: bold; margin-top: 10px; margin-bottom: 5px;">📍 一般綜合電商 (家電、生活用品)</div>
+      <label><input type="checkbox" class="platform-cb" value="蝦皮 (Shopee)" checked onchange="checkState()"> 🦐 蝦皮 (Shopee)</label>
+      <label><input type="checkbox" class="platform-cb" value="momo購物" checked onchange="checkState()"> 🍑 momo購物</label>
+      <label><input type="checkbox" class="platform-cb" value="PChome24h" checked onchange="checkState()"> 📦 PChome24h</label>
+      <label><input type="checkbox" class="platform-cb" value="Coupang 酷澎" checked onchange="checkState()"> 🚀 Coupang 酷澎</label>
+
+      <div style="color: #188038; font-weight: bold; margin-top: 15px; margin-bottom: 5px;">💊 跨境藥妝平台 (專查禁賣之醫藥品)</div>
+      <label><input type="checkbox" class="platform-cb" value="多和夢 DOKODEMO" checked onchange="checkState()"> 💊 多和夢 DOKODEMO</label>
+      <label><input type="checkbox" class="platform-cb" value="大國藥妝(全球直郵店)" checked onchange="checkState()"> 🏪 大國藥妝 (全球店)</label>
+      <label><input type="checkbox" class="platform-cb" value="Amazon JP 日本亞馬遜" checked onchange="checkState()"> 📦 Amazon JP</label>
+    </div>
+
+    <div class="btn-row">
+      <button id="clearBtn" class="action-btn" onclick="clearAll()">🗑️ 清除</button>
+      <button id="btn" class="submit-btn" onclick="startSearch()">開始比價 ✨</button>
+      <button id="cancelBtn" class="cancel-btn" onclick="cancelSearch()">⏸️ 取消</button>
+    </div>
+    
+    <div id="statusInfo" class="status"></div>
+    <div id="result"></div>
+  </div>
+
+  <script>
+    // ⚠️⚠️⚠️ 最重要的一步：請把這裡換成你最新的 GAS 部署網址 ⚠️⚠️⚠️
+    const API_URL = "https://script.google.com/macros/s/你的網址/exec";
+
+    let abortController = null; // 用來強制取消 Fetch 請求
+
+    function toggleAll() { const isChecked = document.getElementById('selectAll').checked; document.querySelectorAll('.platform-cb').forEach(cb => cb.checked = isChecked); }
+    function checkState() { const checkboxes = document.querySelectorAll('.platform-cb'); document.getElementById('selectAll').checked = Array.from(checkboxes).every(cb => cb.checked); }
+    
+    function clearAll() {
+      ['pic1','pic2','pic3','albumPics','manualPrice'].forEach(id => document.getElementById(id).value = "");
+      [1,2,3].forEach(num => {
+        let lbl = document.getElementById('lbl'+num);
+        lbl.style.backgroundImage = ""; lbl.style.borderStyle = "dashed"; lbl.innerHTML = `<span>📸<br>拍第 ${num} 張</span>`;
+      });
+      let alb = document.getElementById('albumLabel');
+      alb.style.backgroundImage = ""; alb.style.borderStyle = "dashed"; alb.innerHTML = "<span>🖼️ 從相簿選取<br><small style='font-weight:normal; color:#888;'>(支援多選)</small></span>";
+      document.getElementById('result').style.display = 'none';
+      document.getElementById('statusInfo').innerHTML = '';
+      cancelSearch();
+    }
+
+    function updateLabel(num) {
+      const fileInput = document.getElementById('pic' + num);
+      if (fileInput.files && fileInput.files[0]) {
+        const imgUrl = URL.createObjectURL(fileInput.files[0]);
+        const lbl = document.getElementById('lbl' + num);
+        lbl.style.backgroundImage = `url('${imgUrl}')`; lbl.style.borderStyle = 'solid';
+        lbl.innerHTML = `<div class="overlay"><span style="font-size:24px;">✅</span></div>`;
+      }
+    }
+
+    function updateAlbumLabel() {
+      const fileInput = document.getElementById('albumPics');
+      if (fileInput.files && fileInput.files.length > 0) {
+        const imgUrl = URL.createObjectURL(fileInput.files[0]);
+        const lbl = document.getElementById('albumLabel');
+        lbl.style.backgroundImage = `url('${imgUrl}')`; lbl.style.borderStyle = 'solid';
+        lbl.innerHTML = `<div class="overlay-album"><b>✅ 已選取 ${fileInput.files.length} 張照片</b></div>`;
+      }
+    }
+
+    function cancelSearch() {
+      if (abortController) { abortController.abort(); abortController = null; } // 中斷網路請求
+      document.getElementById('btn').disabled = false; document.getElementById('btn').innerText = "開始比價 ✨";
+      document.getElementById('clearBtn').style.display = 'block'; document.getElementById('cancelBtn').style.display = 'none';
+      document.getElementById('loadingOverlay').style.display = 'none'; // 隱藏載入動畫
+    }
+
+    async function processFile(file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+          const img = new Image();
+          img.src = event.target.result;
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width, height = img.height;
+            const MAX_SIZE = 1024;
+            if (width > height) { if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; } } 
+            else { if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; } }
+            canvas.width = width; canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', 0.7));
+          };
+        };
+      });
+    }
+
+    async function startSearch() {
+      const selectedPlatforms = Array.from(document.querySelectorAll('.platform-cb:checked')).map(cb => cb.value);
+      if (selectedPlatforms.length === 0) { alert("請勾選比價平台！"); return; }
+      
+      const files = [document.getElementById('pic1').files[0], document.getElementById('pic2').files[0], document.getElementById('pic3').files[0]].filter(f => f !== undefined);
+      const albumFiles = document.getElementById('albumPics').files;
+      for (let i = 0; i < albumFiles.length; i++) { files.push(albumFiles[i]); }
+      if (files.length === 0) { alert("請上傳照片！"); return; }
+      
+      const btn = document.getElementById('btn'); const resDiv = document.getElementById('result');
+      
+      // UI 變化：開啟 Loading 動畫
+      btn.disabled = true; btn.innerText = "⏳ 處理中...";
+      document.getElementById('clearBtn').style.display = 'none'; document.getElementById('cancelBtn').style.display = 'block';
+      document.getElementById('loadingOverlay').style.display = 'flex'; // 顯示超炫動畫
+      document.getElementById('loadingMsg').innerText = "📸 正在壓縮圖片...";
+      resDiv.style.display = 'none';
+
+      try {
+        const base64Array = [];
+        for (let file of files) { base64Array.push(await processFile(file)); }
+        
+        document.getElementById('loadingMsg').innerText = "🚀 呼叫 AI 跨海查價中...";
+        
+        // 準備要傳送給 Google 的資料包 (JSON 格式)
+        const payload = {
+          imageDataArray: base64Array,
+          localPrice: document.getElementById('manualPrice').value ? `${document.getElementById('manualPrice').value} ${document.getElementById('currency').value}` : "",
+          selectedPlatforms: selectedPlatforms
+        };
+
+        abortController = new AbortController(); // 設定取消信號
+        
+        // 🌟 核心改變：使用 Fetch API 將資料打給 Google doPost
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify(payload),
+          signal: abortController.signal // 讓取消按鈕可以中斷連線
+        });
+
+        const res = await response.json(); // 解析 Google 回傳的結果
+
+        if (!res || !res.text) throw new Error("伺服器回傳格式錯誤");
+
+        // 成功！顯示結果
+        resDiv.style.display = 'block';
+        resDiv.innerHTML = res.text.replace(/```html/g, '').replace(/```/g, '');
+        document.getElementById('statusInfo').innerHTML = `🎁 剩餘免費：${res.remainingFree} 次 | 🛡️ 累計預算：NT$ ${Math.floor(res.monthlySpent)}`;
+        cancelSearch(); // 關閉動畫與復原按鈕
+
+      } catch (e) {
+         if (e.name === 'AbortError') {
+             resDiv.style.display = 'block';
+             resDiv.innerHTML = `<span style="color:#f29900; font-weight:bold;">⏸️ 搜尋已取消</span>`;
+         } else {
+             resDiv.style.display = 'block';
+             resDiv.innerHTML = `<span style="color:red; font-weight:bold;">❌ 錯誤：連線逾時或發生異常 (${e.message})</span>`;
+         }
+         cancelSearch();
+      }
+    }
+  </script>
 </body>
 </html>
