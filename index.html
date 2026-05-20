@@ -91,7 +91,7 @@
   </div>
 
   <script>
-    // ⚠️ 貼上你剛才重新部署的 GAS 網址！
+    // 網址已確認與後端大腦一致
     const API_URL = "https://script.google.com/macros/s/AKfycbzxQkRTSyY87k4AMkLUDktieW5ts4XJfNsRzmvq7K6rAMCsnovZkN2U2nPzyoGlfp2R/exec";
 
     let abortController = null;
@@ -230,9 +230,9 @@
         abortController = new AbortController();
         const timeoutId = setTimeout(() => { if (abortController) abortController.abort(); }, 60000);
 
+        // 🌟 核心修正點：移除 Headers 宣告，完美避開 iOS OPTIONS 跨網域預檢地雷
         const response = await fetch(API_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
           signal: abortController.signal
         });
@@ -244,7 +244,7 @@
         if (res.error) throw new Error(res.text);
         if (!res || !res.text) throw new Error("伺服器回傳格式錯誤");
 
-        // 🌟 修改點：嚴格防禦的 JSON 解析機制
+        // 🌟 防禦性 JSON 解析
         let aiData;
         try {
           if (typeof res.text !== "string" || !res.text.trim()) {
