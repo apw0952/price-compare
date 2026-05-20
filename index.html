@@ -78,7 +78,7 @@
     </div>
     <div class="divider">或者</div>
     <label for="albumPics" class="album-btn" id="albumLabel">
-      <span>🖼️ 從相簿選取<br><small style="font-weight:normal; color:#888;">(支援多選)</small></span>
+      <span>🖼️ 從相簿選取<br><small style="font-weight:normal; color:#888;">(最多選 4 張)</small></span>
     </label>
     <input type="file" id="albumPics" accept="image/*" multiple onchange="updateAlbumLabel()">
 
@@ -127,6 +127,7 @@
 
     let abortController = null;
     let isSearching = false; // 狀態機：防止 UI 誤關
+    let activeObjectUrls = []; // 追蹤所有產生的 ObjectURL 以便後續釋放
 
     function getDeviceId() {
       let deviceId = localStorage.getItem('price_compare_device_id');
@@ -140,23 +141,31 @@
     function toggleAll() { const isChecked = document.getElementById('selectAll').checked; document.querySelectorAll('.platform-cb').forEach(cb => cb.checked = isChecked); }
     function checkState() { const checkboxes = document.querySelectorAll('.platform-cb'); document.getElementById('selectAll').checked = Array.from(checkboxes).every(cb => cb.checked); }
     
+    // 釋放所有記憶體中的預覽圖
+    function releaseMemory() {
+      activeObjectUrls.forEach(url => URL.revokeObjectURL(url));
+      activeObjectUrls = [];
+    }
+
     function clearAll() {
+      releaseMemory(); // 清除時釋放記憶體
       ['pic1','pic2','pic3','albumPics','manualPrice'].forEach(id => document.getElementById(id).value = "");
       [1,2,3].forEach(num => {
         let lbl = document.getElementById('lbl'+num);
         lbl.style.backgroundImage = ""; lbl.style.borderStyle = "dashed"; lbl.innerHTML = `<span>📸<br>拍第 ${num} 張</span>`;
       });
       let alb = document.getElementById('albumLabel');
-      alb.style.backgroundImage = ""; alb.style.borderStyle = "dashed"; alb.innerHTML = "<span>🖼️ 從相簿選取<br><small style='font-weight:normal; color:#888;'>(支援多選)</small></span>";
+      alb.style.backgroundImage = ""; alb.style.borderStyle = "dashed"; alb.innerHTML = "<span>🖼️ 從相簿選取<br><small style='font-weight:normal; color:#888;'>(最多選 4 張)</small></span>";
       document.getElementById('result').style.display = 'none';
       document.getElementById('statusInfo').innerHTML = '';
-      if(isSearching) cancelSearch(); // 只有在查價中才允許清除觸發取消
+      if(isSearching) cancelSearch();
     }
 
     function updateLabel(num) {
       const fileInput = document.getElementById('pic' + num);
       if (fileInput.files && fileInput.files[0]) {
         const imgUrl = URL.createObjectURL(fileInput.files[0]);
+        activeObjectUrls.push(imgUrl); // 記錄下來，稍後釋放
         const lbl = document.getElementById('lbl' + num);
         lbl.style.backgroundImage = `url('${imgUrl}')`; lbl.style.borderStyle = 'solid';
         lbl.innerHTML = `<div class="overlay"><span style="font-size:24px;">✅</span></div>`;
@@ -166,14 +175,25 @@
     function updateAlbumLabel() {
       const fileInput = document.getElementById('albumPics');
       if (fileInput.files && fileInput.files.length > 0) {
-        const imgUrl = URL.createObjectURL(fileInput.files[0]);
+        // 🌟 防爆機制：如果超過 4 張，強行截斷並警告
+        if (fileInput.files.length > 4) {
+           alert("為確保比價速度與穩定，相簿最多只能選擇 4 張照片喔！");
+           // 建立新的 FileList (透過 DataTransfer 繞過不可修改限制)
+           const dt = new DataTransfer();
+           for(let i = 0; i < 4; i++) {
+               dt.items.add(fileInput.files[i]);
+           }
+           fileInput.files = dt.files;
+        }
+
+        const imgUrl = URL.createObjectURL(fileInput.files[0]); // UI 預覽第一張
+        activeObjectUrls.push(imgUrl); // 記錄下來，稍後釋放
         const lbl = document.getElementById('albumLabel');
         lbl.style.backgroundImage = `url('${imgUrl}')`; lbl.style.borderStyle = 'solid';
         lbl.innerHTML = `<div class="overlay-album"><b>✅ 已選取 ${fileInput.files.length} 張照片</b></div>`;
       }
     }
 
-    // 集中管理狀態與 UI 復原
     function resetUI() {
       isSearching = false;
       document.getElementById('btn').disabled = false; document.getElementById('btn').innerText = "開始比價 ✨";
@@ -190,14 +210,12 @@
       return new Promise((resolve) => {
         const reader = new FileReader();
         
-        // 🛠️ 防護 1：檔案讀取失敗立刻放棄，不卡死
         reader.onerror = () => resolve(null);
         
         reader.readAsDataURL(file);
         reader.onload = (event) => {
           const img = new Image();
           
-          // 🛠️ 防護 2：圖片渲染失敗立刻放棄，不卡死
           img.onerror = () => resolve(null);
           
           img.src = event.target.result;
@@ -210,7 +228,12 @@
             canvas.width = width; canvas.height = height;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL('image/jpeg', 0.7));
+            
+            const compressedData = canvas.toDataURL('image/jpeg', 0.7);
+            
+            // 🌟 防漏水機制：壓縮完畢後，立刻釋放 Image 物件的記憶體
+            img.src = ''; 
+            resolve(compressedData);
           };
         };
       });
@@ -227,7 +250,7 @@
       
       const btn = document.getElementById('btn'); const resDiv = document.getElementById('result');
       
-      isSearching = true; // 狀態機鎖定
+      isSearching = true; 
       btn.disabled = true; btn.innerText = "⏳ 處理中...";
       document.getElementById('clearBtn').style.display = 'none'; document.getElementById('cancelBtn').style.display = 'block';
       document.getElementById('loadingOverlay').style.display = 'flex'; 
@@ -238,7 +261,6 @@
         const base64Array = [];
         for (let file of files) { 
            const compressed = await processFile(file);
-           // 🛠️ 防護 3：只收集壓縮成功的圖片
            if (compressed) base64Array.push(compressed);
         }
         
@@ -255,22 +277,20 @@
 
         abortController = new AbortController();
         
-        // 🛠️ 防護 4：60 秒強制 Timeout
         const timeoutId = setTimeout(() => {
-            if (abortController) abortController.abort(new Error("網路熱線超時 (60秒)"));
+            // 改為安全寫法，由外部捕獲
+            if (abortController) abortController.abort();
         }, 60000);
 
         const response = await fetch(API_URL, {
           method: 'POST',
-          // 🛠️ 防護 5：明確宣告格式，避免手機瀏覽器丟包
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
           signal: abortController.signal
         });
         
-        clearTimeout(timeoutId); // 成功連線則解除 Timeout 炸彈
+        clearTimeout(timeoutId); 
 
-        // 🛠️ 防護 6：檢查 Google 後端是否當機 (回傳非 200 狀態)
         if (!response.ok) {
            throw new Error(`伺服器連線異常 (${response.status})，請稍後再試。`);
         }
@@ -284,16 +304,20 @@
         resDiv.innerHTML = res.text.replace(/```html/g, '').replace(/```/g, '');
         document.getElementById('statusInfo').innerHTML = `🎁 剩餘免費：${res.remainingFree} 次 | 🛡️ 累計預算：NT$ ${Math.floor(res.monthlySpent)}`;
         resetUI(); 
+        
+        // 🌟 流程結束，釋放所有預覽圖佔用的記憶體
+        releaseMemory();
 
       } catch (e) {
          resDiv.style.display = 'block';
-         if (e.name === 'AbortError' || e.message === "網路熱線超時 (60秒)") {
+         if (e.name === 'AbortError') {
              resDiv.innerHTML = `<span style="color:#f29900; font-weight:bold;">⏸️ 搜尋已取消或網路不穩逾時</span>`;
          } else {
              let errorMsg = e.message.replace('Error: ', '');
              resDiv.innerHTML = `<div style="color:#d93025; font-weight:bold; font-size: 16px; padding: 10px; background: #fce8e6; border-radius: 8px;">${errorMsg}</div>`;
          }
          resetUI();
+         releaseMemory(); // 發生錯誤也必須釋放記憶體
       }
     }
   </script>
