@@ -244,12 +244,15 @@
         if (res.error) throw new Error(res.text);
         if (!res || !res.text) throw new Error("伺服器回傳格式錯誤");
 
-        // 🌟 這裡負責把 AI 回傳的純 JSON 畫成網頁畫面
+        // 🌟 修改點：嚴格防禦的 JSON 解析機制
         let aiData;
         try {
+          if (typeof res.text !== "string" || !res.text.trim()) {
+            throw new Error("大腦回傳內容為空或格式錯誤");
+          }
           aiData = JSON.parse(res.text);
         } catch(err) {
-          throw new Error("解析 AI 資料失敗，請再試一次。");
+          throw new Error("解析 AI 資料失敗：" + err.message);
         }
 
         let platformsHtml = aiData.platforms.map(p => `<li class="platform-li">${p.emoji} <b>${p.name}</b>: ${p.result}</li>`).join('');
