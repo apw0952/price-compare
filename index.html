@@ -126,8 +126,8 @@
     const API_URL = "https://script.google.com/macros/s/AKfycbzxQkRTSyY87k4AMkLUDktieW5ts4XJfNsRzmvq7K6rAMCsnovZkN2U2nPzyoGlfp2R/exec";
 
     let abortController = null;
+    let isSearching = false; // 狀態機：防止 UI 誤關
 
-    // 🌟 新增功能：取得或產生手機專屬身分證 (Device ID)
     function getDeviceId() {
       let deviceId = localStorage.getItem('price_compare_device_id');
       if (!deviceId) {
@@ -150,7 +150,7 @@
       alb.style.backgroundImage = ""; alb.style.borderStyle = "dashed"; alb.innerHTML = "<span>🖼️ 從相簿選取<br><small style='font-weight:normal; color:#888;'>(支援多選)</small></span>";
       document.getElementById('result').style.display = 'none';
       document.getElementById('statusInfo').innerHTML = '';
-      cancelSearch();
+      if(isSearching) cancelSearch(); // 只有在查價中才允許清除觸發取消
     }
 
     function updateLabel(num) {
@@ -173,19 +173,33 @@
       }
     }
 
-    function cancelSearch() {
-      if (abortController) { abortController.abort(); abortController = null; }
+    // 集中管理狀態與 UI 復原
+    function resetUI() {
+      isSearching = false;
       document.getElementById('btn').disabled = false; document.getElementById('btn').innerText = "開始比價 ✨";
       document.getElementById('clearBtn').style.display = 'block'; document.getElementById('cancelBtn').style.display = 'none';
       document.getElementById('loadingOverlay').style.display = 'none'; 
     }
 
+    function cancelSearch() {
+      if (abortController) { abortController.abort(); abortController = null; }
+      resetUI();
+    }
+
     async function processFile(file) {
       return new Promise((resolve) => {
         const reader = new FileReader();
+        
+        // 🛠️ 防護 1：檔案讀取失敗立刻放棄，不卡死
+        reader.onerror = () => resolve(null);
+        
         reader.readAsDataURL(file);
         reader.onload = (event) => {
           const img = new Image();
+          
+          // 🛠️ 防護 2：圖片渲染失敗立刻放棄，不卡死
+          img.onerror = () => resolve(null);
+          
           img.src = event.target.result;
           img.onload = () => {
             const canvas = document.createElement('canvas');
@@ -213,6 +227,7 @@
       
       const btn = document.getElementById('btn'); const resDiv = document.getElementById('result');
       
+      isSearching = true; // 狀態機鎖定
       btn.disabled = true; btn.innerText = "⏳ 處理中...";
       document.getElementById('clearBtn').style.display = 'none'; document.getElementById('cancelBtn').style.display = 'block';
       document.getElementById('loadingOverlay').style.display = 'flex'; 
@@ -221,50 +236,64 @@
 
       try {
         const base64Array = [];
-        for (let file of files) { base64Array.push(await processFile(file)); }
+        for (let file of files) { 
+           const compressed = await processFile(file);
+           // 🛠️ 防護 3：只收集壓縮成功的圖片
+           if (compressed) base64Array.push(compressed);
+        }
         
+        if (base64Array.length === 0) throw new Error("圖片讀取失敗，請重新拍攝。");
+
         document.getElementById('loadingMsg').innerText = "🚀 呼叫 AI 跨海查價中...";
         
-        // 🌟 更新資料包：加上專屬身分證 (deviceId)
         const payload = {
           imageDataArray: base64Array,
           localPrice: document.getElementById('manualPrice').value ? `${document.getElementById('manualPrice').value} ${document.getElementById('currency').value}` : "",
           selectedPlatforms: selectedPlatforms,
-          deviceId: getDeviceId() // 提交身分證給 Google 檢查限流
+          deviceId: getDeviceId()
         };
 
         abortController = new AbortController();
         
+        // 🛠️ 防護 4：60 秒強制 Timeout
+        const timeoutId = setTimeout(() => {
+            if (abortController) abortController.abort(new Error("網路熱線超時 (60秒)"));
+        }, 60000);
+
         const response = await fetch(API_URL, {
           method: 'POST',
+          // 🛠️ 防護 5：明確宣告格式，避免手機瀏覽器丟包
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
           signal: abortController.signal
         });
+        
+        clearTimeout(timeoutId); // 成功連線則解除 Timeout 炸彈
+
+        // 🛠️ 防護 6：檢查 Google 後端是否當機 (回傳非 200 狀態)
+        if (!response.ok) {
+           throw new Error(`伺服器連線異常 (${response.status})，請稍後再試。`);
+        }
 
         const res = await response.json();
 
-        // 🌟 錯誤攔截升級：如果是後端丟出的錯誤（例如預算超限），直接拋出給 Catch 區塊顯示紅字
-        if (res.error) {
-           throw new Error(res.text);
-        }
+        if (res.error) throw new Error(res.text);
         if (!res || !res.text) throw new Error("伺服器回傳格式錯誤");
 
         resDiv.style.display = 'block';
         resDiv.innerHTML = res.text.replace(/```html/g, '').replace(/```/g, '');
         document.getElementById('statusInfo').innerHTML = `🎁 剩餘免費：${res.remainingFree} 次 | 🛡️ 累計預算：NT$ ${Math.floor(res.monthlySpent)}`;
-        cancelSearch(); 
+        resetUI(); 
 
       } catch (e) {
-         if (e.name === 'AbortError') {
-             resDiv.style.display = 'block';
-             resDiv.innerHTML = `<span style="color:#f29900; font-weight:bold;">⏸️ 搜尋已取消</span>`;
+         resDiv.style.display = 'block';
+         if (e.name === 'AbortError' || e.message === "網路熱線超時 (60秒)") {
+             resDiv.innerHTML = `<span style="color:#f29900; font-weight:bold;">⏸️ 搜尋已取消或網路不穩逾時</span>`;
          } else {
-             // 🌟 更乾淨的錯誤顯示：直接把 Google 後端的明確警告印出來
              let errorMsg = e.message.replace('Error: ', '');
-             resDiv.style.display = 'block';
              resDiv.innerHTML = `<div style="color:#d93025; font-weight:bold; font-size: 16px; padding: 10px; background: #fce8e6; border-radius: 8px;">${errorMsg}</div>`;
          }
-         cancelSearch();
+         resetUI();
       }
     }
   </script>
