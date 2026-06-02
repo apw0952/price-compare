@@ -166,6 +166,7 @@
       resetUI();
     }
 
+    // 🎯 圖片壓縮優化核心：最大邊長降至 700 鎖死 Token 低消，畫質微調至 0.45 提速
     async function processFile(file) {
       return new Promise((resolve) => {
         const reader = new FileReader();
@@ -178,13 +179,13 @@
           img.onload = () => {
             const canvas = document.createElement('canvas');
             let width = img.width, height = img.height;
-            const MAX_SIZE = 1024;
+            const MAX_SIZE = 700; 
             if (width > height) { if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; } } 
             else { if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; } }
             canvas.width = width; canvas.height = height;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
-            const compressedData = canvas.toDataURL('image/jpeg', 0.7);
+            const compressedData = canvas.toDataURL('image/jpeg', 0.45); 
             img.src = ''; 
             resolve(compressedData);
           };
@@ -230,7 +231,6 @@
         abortController = new AbortController();
         const timeoutId = setTimeout(() => { if (abortController) abortController.abort(); }, 60000);
 
-        // 🌟 核心修正點：移除 Headers 宣告，完美避開 iOS OPTIONS 跨網域預檢地雷
         const response = await fetch(API_URL, {
           method: 'POST',
           body: JSON.stringify(payload),
@@ -244,7 +244,6 @@
         if (res.error) throw new Error(res.text);
         if (!res || !res.text) throw new Error("伺服器回傳格式錯誤");
 
-        // 🌟 防禦性 JSON 解析
         let aiData;
         try {
           if (typeof res.text !== "string" || !res.text.trim()) {
@@ -281,15 +280,15 @@
         releaseMemory();
 
       } catch (e) {
-         resDiv.style.display = 'block';
-         if (e.name === 'AbortError') {
-             resDiv.innerHTML = `<span style="color:#f29900; font-weight:bold;">⏸️ 搜尋已取消或網路不穩逾時</span>`;
-         } else {
-             let errorMsg = e.message.replace('Error: ', '');
-             resDiv.innerHTML = `<div style="color:#d93025; font-weight:bold; font-size: 16px; padding: 10px; background: #fce8e6; border-radius: 8px;">${errorMsg}</div>`;
-         }
-         resetUI();
-         releaseMemory(); 
+          resDiv.style.display = 'block';
+          if (e.name === 'AbortError') {
+              resDiv.innerHTML = `<span style="color:#f29900; font-weight:bold;">⏸️ 搜尋已取消或網路不穩逾時</span>`;
+          } else {
+              let errorMsg = e.message.replace('Error: ', '');
+              resDiv.innerHTML = `<div style="color:#d93025; font-weight:bold; font-size: 16px; padding: 10px; background: #fce8e6; border-radius: 8px;">${errorMsg}</div>`;
+          }
+          resetUI();
+          releaseMemory(); 
       }
     }
   </script>
