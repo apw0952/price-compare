@@ -165,7 +165,7 @@
       resetUI();
     }
 
-    // 🎯 深度連結跳轉處理器 (搭載「剪斷引信」防幽靈網頁技術)
+    // 🎯 深度連結跳轉處理器 (全平台強制接管版)
     function handleDeepLink(event, platformName, webUrl, keyword) {
       if (!keyword || keyword.toLowerCase() === 'unknown') return true;
 
@@ -174,41 +174,36 @@
       let appScheme = "";
       let safeWebUrl = webUrl;
 
-      // 根據不同平台組裝喚醒碼
+      // 根據不同平台，強制組裝「絕對不會死」的純淨搜尋網址與 App 喚醒碼
       if (platformName.includes('蝦皮') || platformName.toLowerCase().includes('shopee')) {
+        // 蝦皮專用喚醒碼與安全網頁
         appScheme = `shopee://search?keyword=${encodeURIComponent(keyword)}`;
         safeWebUrl = `https://shopee.tw/search?keyword=${encodeURIComponent(keyword)}`;
       } 
       else if (platformName.includes('酷澎') || platformName.toLowerCase().includes('coupang')) {
+        // 酷澎專用喚醒碼與安全網頁
         appScheme = `coupang://search?q=${encodeURIComponent(keyword)}`;
         safeWebUrl = `https://tw.coupang.com/np/search?q=${encodeURIComponent(keyword)}`;
       }
       else if (platformName.includes('momo')) {
+        // momo 專用喚醒碼與安全網頁
         appScheme = `momoshop://search?keyword=${encodeURIComponent(keyword)}`;
         safeWebUrl = `https://m.momoshop.com.tw/search.momo?searchKeyword=${encodeURIComponent(keyword)}`;
       }
       else {
-        // 沒有註冊喚醒碼的平台，直接乖乖開網頁
+        // 如果是 DOKODEMO、大國等平台，因為多數人沒裝 App，直接用安全網頁開啟
         window.open(webUrl, '_blank');
         return false;
       }
 
-      // 🛡️ 防幽靈網頁：設定拆彈開關
-      let fallbackTimer;
-
-      // 監聽器：一旦網頁失去焦點（代表成功跳轉去了 App），立刻拆除引信！
-      const blurHandler = () => {
-        clearTimeout(fallbackTimer);
-        window.removeEventListener('blur', blurHandler);
-      };
-      window.addEventListener('blur', blurHandler);
-
-      // 啟動 0.5 秒的安全氣囊引信
-      fallbackTimer = setTimeout(() => {
-        // 如果 0.5 秒到了，監聽器還沒被觸發（網頁還醒著），代表跳轉失敗
-        window.removeEventListener('blur', blurHandler);
-        // 這時才打開備用的安全網頁
-        window.open(safeWebUrl, '_blank');
+      // 啟動智慧跳轉機制
+      const startTime = Date.now();
+      setTimeout(() => {
+        // 如果 0.5 秒後還停留在瀏覽器 (代表沒裝 App 或喚醒失敗)
+        if (Date.now() - startTime < 600) {
+          // 強制開啟我們手動組裝的安全搜尋網頁，確保絕對有東西看！
+          window.open(safeWebUrl, '_blank');
+        }
       }, 500);
 
       // 第一時間強制嘗試喚醒本地 App
