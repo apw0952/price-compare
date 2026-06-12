@@ -165,65 +165,6 @@
       resetUI();
     }
 
-    // 🎯 深度連結跳轉處理器 (模擬實體點擊 + 告別叉叉視窗版)
-    function handleDeepLink(event, platformName, webUrl, keyword) {
-      if (!keyword || keyword.toLowerCase() === 'unknown') return true;
-
-      event.preventDefault(); 
-      
-      let appScheme = "";
-      let safeWebUrl = webUrl;
-
-      // 組裝喚醒碼與安全網頁
-      if (platformName.includes('蝦皮') || platformName.toLowerCase().includes('shopee')) {
-        appScheme = `shopee://search?keyword=${encodeURIComponent(keyword)}`;
-        safeWebUrl = `https://shopee.tw/search?keyword=${encodeURIComponent(keyword)}`;
-      } 
-      else if (platformName.includes('酷澎') || platformName.toLowerCase().includes('coupang')) {
-        appScheme = `coupang://search?q=${encodeURIComponent(keyword)}`;
-        safeWebUrl = `https://tw.coupang.com/np/search?q=${encodeURIComponent(keyword)}`;
-      }
-      else if (platformName.includes('momo')) {
-        appScheme = `momoshop://search?keyword=${encodeURIComponent(keyword)}`;
-        safeWebUrl = `https://m.momoshop.com.tw/search.momo?searchKeyword=${encodeURIComponent(keyword)}`;
-      }
-      else {
-        // 沒有喚醒碼的平台，用 assign 避免 PWA 彈出「叉叉視窗」
-        window.location.assign(webUrl);
-        return false;
-      }
-
-      // 🌟 破解 iOS 阻擋：建立隱形 <a> 標籤模擬人類點擊
-      const a = document.createElement('a');
-      a.href = appScheme;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-
-      let fallbackTimer;
-
-      // 監聽器：使用更可靠的 visibilitychange 來判斷是否切換到 App
-      const visibilityHandler = () => {
-        if (document.visibilityState === 'hidden') {
-          clearTimeout(fallbackTimer); // 成功跳轉，拆除引信
-        }
-      };
-      document.addEventListener('visibilitychange', visibilityHandler);
-
-      // 啟動 0.8 秒的安全氣囊 (多給 iOS 0.3秒的反應時間)
-      fallbackTimer = setTimeout(() => {
-        document.removeEventListener('visibilitychange', visibilityHandler);
-        if (document.body.contains(a)) document.body.removeChild(a);
-        
-        // 跳轉失敗時，開啟安全網頁 (使用 assign 取代 _blank，徹底消滅叉叉)
-        window.location.assign(safeWebUrl);
-      }, 800);
-
-      // 發動模擬點擊
-      a.click();
-
-      return false;
-    }
-
     async function processFile(file) {
       return new Promise((resolve) => {
         const reader = new FileReader();
@@ -317,8 +258,24 @@
         
         const btn1Title = isUnknown ? '⚠️ 台灣常規無販售' : '🔗 最低價直達車';
         const btn1Text = isUnknown ? '🔍 一鍵搜尋全球低價' : `👉 前往 ${aiData.best_link.name}`;
-        
         const reviewUrl = `https://www.google.com/search?q=${encodeURIComponent(aiData.item_original + ' 評價 心得 PTT Dcard')}`;
+
+        // 🌟 全局物理分流架構：分別打包「純 App 喚醒碼」與「安全常規網頁網址」
+        let appSchemeUrl = "";
+        let safeWebUrl = aiData.best_link.url;
+        let platformName = aiData.best_link.name.toLowerCase();
+        let keyword = encodeURIComponent(aiData.best_link.keyword || '');
+
+        if (platformName.includes('蝦皮') || platformName.includes('shopee')) {
+            appSchemeUrl = `shopee://search?keyword=${keyword}`;
+            safeWebUrl = `https://shopee.tw/search?keyword=${keyword}`;
+        } else if (platformName.includes('酷澎') || platformName.includes('coupang')) {
+            appSchemeUrl = `coupang://search?q=${keyword}`;
+            safeWebUrl = `https://tw.coupang.com/np/search?q=${keyword}`;
+        } else if (platformName.includes('momo')) {
+            appSchemeUrl = `momoshop://search?keyword=${keyword}`;
+            safeWebUrl = `https://m.momoshop.com.tw/search.momo?searchKeyword=${keyword}`;
+        }
 
         resDiv.innerHTML = `
           <h3>💰 核心比價結論</h3>
@@ -330,24 +287,31 @@
           <h3>🛒 指定平台比價結果</h3>
           <ul style="padding-left: 20px;">${platformsHtml}</ul>
           
-          <h3 style="margin-top:25px;">${btn1Title}</h3>
+          <h3>${btn1Title}</h3>
           
-          <div style="display:flex; flex-direction:column; gap:12px; margin-top:10px;">
-            <a href="${aiData.best_link.url}" 
-               target="_blank" 
-               onclick="return handleDeepLink(event, '${aiData.best_link.name}', '${aiData.best_link.url}', '${aiData.best_link.keyword}')"
-               style="display:block; padding:15px; background-color:#ff5722; color:white; text-decoration:none; border-radius:12px; font-weight:bold; width:100%; box-sizing:border-box; text-align:center; font-size:16px; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
-              ${btn1Text}
-            </a>
+          <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px; align-items:center;">
+            ${appSchemeUrl ? `
+              <button onclick="window.location.href='${appSchemeUrl}'; return false;" style="display:block; padding:15px; background-color:#ff5722; color:white; border:none; border-radius:12px; font-weight:bold; width:100%; box-sizing:border-box; text-align:center; font-size:16px; box-shadow:0 4px 6px rgba(0,0,0,0.1); cursor:pointer;">
+                🚀 打開 ${aiData.best_link.name} App 搜尋
+              </button>
+              
+              <button onclick="window.location.assign('${safeWebUrl}'); return false;" style="background:none; border:none; color:#1a73e8; font-size:14px; text-decoration:underline; margin-top:4px; padding:5px; font-weight:bold; cursor:pointer;">
+                🌐 沒安裝 App？改開網頁版比價
+              </button>
+            ` : `
+              <button onclick="window.location.assign('${safeWebUrl}'); return false;" style="display:block; padding:15px; background-color:#ff5722; color:white; border:none; border-radius:12px; font-weight:bold; width:100%; box-sizing:border-box; text-align:center; font-size:16px; box-shadow:0 4px 6px rgba(0,0,0,0.1); cursor:pointer;">
+                👉 前往 ${aiData.best_link.name}
+              </button>
+            `}
             
-            <a href="${reviewUrl}" target="_blank" style="display:block; padding:15px; background-color:#1a73e8; color:white; text-decoration:none; border-radius:12px; font-weight:bold; width:100%; box-sizing:border-box; text-align:center; font-size:16px; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
+            <button onclick="window.location.assign('${reviewUrl}'); return false;" style="display:block; padding:15px; background-color:#1a73e8; color:white; border:none; border-radius:12px; font-weight:bold; width:100%; box-sizing:border-box; text-align:center; font-size:16px; box-shadow:0 4px 6px rgba(0,0,0,0.1); margin-top:8px; cursor:pointer;">
               💬 一鍵查看商品評價與開箱心得
-            </a>
+            </button>
           </div>
           
           ${!isUnknown ? `<small style="color:#888; margin-top:8px; display:block; text-align:center;">(原關鍵字：${aiData.best_link.keyword})</small>` : ''}
           
-          <h3 style="margin-top:25px;">⚠️ 注意事項</h3>
+          <h3>⚠️ 注意事項</h3>
           <p style="font-size:14px; line-height:1.5;">${aiData.warnings}</p>
           <hr style="border:0; border-top:1px solid #eee; margin:15px 0;">
           <small style="color:#999; display:block; line-height:1.4;">辨識結果：${aiData.item_original}<br>中文名稱：${aiData.item_translated}</small>
