@@ -165,16 +165,16 @@
       resetUI();
     }
 
-    // 🎯 深度連結跳轉處理器 (iframe 隱形偷渡版)
+    // 🎯 深度連結跳轉處理器 (模擬實體點擊 + 告別叉叉視窗版)
     function handleDeepLink(event, platformName, webUrl, keyword) {
       if (!keyword || keyword.toLowerCase() === 'unknown') return true;
 
-      event.preventDefault(); // 攔截原本的點擊動作
+      event.preventDefault(); 
       
       let appScheme = "";
       let safeWebUrl = webUrl;
 
-      // 根據不同平台，強制組裝純淨搜尋網址與 App 喚醒碼
+      // 組裝喚醒碼與安全網頁
       if (platformName.includes('蝦皮') || platformName.toLowerCase().includes('shopee')) {
         appScheme = `shopee://search?keyword=${encodeURIComponent(keyword)}`;
         safeWebUrl = `https://shopee.tw/search?keyword=${encodeURIComponent(keyword)}`;
@@ -188,37 +188,38 @@
         safeWebUrl = `https://m.momoshop.com.tw/search.momo?searchKeyword=${encodeURIComponent(keyword)}`;
       }
       else {
-        // 如果是沒有註冊喚醒碼的平台，直接乖乖開網頁
-        window.open(webUrl, '_blank');
+        // 沒有喚醒碼的平台，用 assign 避免 PWA 彈出「叉叉視窗」
+        window.location.assign(webUrl);
         return false;
       }
 
+      // 🌟 破解 iOS 阻擋：建立隱形 <a> 標籤模擬人類點擊
+      const a = document.createElement('a');
+      a.href = appScheme;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+
       let fallbackTimer;
 
-      // 監聽器：一旦網頁失去焦點（代表成功跳轉去了 App），立刻拆除引信
-      const blurHandler = () => {
-        clearTimeout(fallbackTimer);
-        window.removeEventListener('blur', blurHandler);
+      // 監聽器：使用更可靠的 visibilitychange 來判斷是否切換到 App
+      const visibilityHandler = () => {
+        if (document.visibilityState === 'hidden') {
+          clearTimeout(fallbackTimer); // 成功跳轉，拆除引信
+        }
       };
-      window.addEventListener('blur', blurHandler);
+      document.addEventListener('visibilitychange', visibilityHandler);
 
-      // 啟動 0.5 秒的安全氣囊引信
+      // 啟動 0.8 秒的安全氣囊 (多給 iOS 0.3秒的反應時間)
       fallbackTimer = setTimeout(() => {
-        window.removeEventListener('blur', blurHandler);
-        // 如果 0.5 秒到了，監聽器還沒被觸發（代表沒跳轉成功離開瀏覽器），打開備用的安全網頁
-        window.open(safeWebUrl, '_blank');
-      }, 500);
+        document.removeEventListener('visibilitychange', visibilityHandler);
+        if (document.body.contains(a)) document.body.removeChild(a);
+        
+        // 跳轉失敗時，開啟安全網頁 (使用 assign 取代 _blank，徹底消滅叉叉)
+        window.location.assign(safeWebUrl);
+      }, 800);
 
-      // 🌟 使用隱形 iframe 來觸發跳轉，避免污染主網頁
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none'; 
-      iframe.src = appScheme;
-      document.body.appendChild(iframe);
-
-      // 1 秒後把這個用完的 iframe 垃圾清掉，避免影響效能
-      setTimeout(() => {
-        document.body.removeChild(iframe);
-      }, 1000);
+      // 發動模擬點擊
+      a.click();
 
       return false;
     }
