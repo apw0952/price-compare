@@ -91,7 +91,6 @@
   </div>
 
   <script>
-    // 網址已確認與後端大腦一致
     const API_URL = "https://script.google.com/macros/s/AKfycbzxQkRTSyY87k4AMkLUDktieW5ts4XJfNsRzmvq7K6rAMCsnovZkN2U2nPzyoGlfp2R/exec";
 
     let abortController = null;
@@ -166,7 +165,40 @@
       resetUI();
     }
 
-    // 🎯 圖片壓縮優化核心：最大邊長降至 700 鎖死 Token 低消，畫質微調至 0.45 提速
+    // 🎯 新增：深度連結跳轉處理器 (智慧安全氣囊)
+    // 概念圖解 
+    function handleDeepLink(event, platformName, webUrl, keyword) {
+      // 只有當平台是「酷澎」時，才啟動這套黑科技跳轉
+      if (platformName && platformName.includes('酷澎')) {
+        event.preventDefault(); // 阻止原本直接跳網頁的行為
+        
+        // 嘗試喚醒酷澎 App 的特殊指令 (Coupang URI Scheme)
+        // 注意：各平台的 scheme 可能會變動，這裡使用常見格式
+        const appSchemeUrl = `coupang://search?q=${encodeURIComponent(keyword)}`;
+        
+        // 記錄跳轉前的心跳時間
+        const startTime = Date.now();
+        
+        // 啟動 0.5 秒的安全倒數計時器
+        setTimeout(() => {
+          // 如果 0.5 秒後，程式還在執行 (代表沒跳轉成功離開瀏覽器)
+          const endTime = Date.now();
+          // 如果時間差小於 600 毫秒，代表還停在原網頁 (沒有裝 App)
+          if (endTime - startTime < 600) {
+            // 自動幫使用者打開醜醜但能用的常規網頁版
+            window.open(webUrl, '_blank');
+          }
+        }, 500);
+
+        // 點擊瞬間，優先強制嘗試喚醒 App
+        window.location.href = appSchemeUrl;
+        return false;
+      }
+      
+      // 如果是蝦皮、momo 等其他平台，目前維持常規開網頁的作法
+      return true;
+    }
+
     async function processFile(file) {
       return new Promise((resolve) => {
         const reader = new FileReader();
@@ -256,14 +288,11 @@
 
         let platformsHtml = aiData.platforms.map(p => `<li class="platform-li">${p.emoji} <b>${p.name}</b>: ${p.result}</li>`).join('');
 
-        // 🌟 核心進化：讀取 AI 狀態機訊號，決定按鈕要不要「變身」
         const isUnknown = (aiData.best_link.name.toLowerCase() === 'unknown' || aiData.best_link.name === '無資料');
         
-        // 按鈕 1：比價決策鈕 (動態切換)
         const btn1Title = isUnknown ? '⚠️ 台灣常規無販售' : '🔗 最低價直達車';
         const btn1Text = isUnknown ? '🔍 一鍵搜尋全球低價' : `👉 前往 ${aiData.best_link.name}`;
         
-        // 按鈕 2：開放研究鈕 (永遠存在的防護網)
         const reviewUrl = `https://www.google.com/search?q=${encodeURIComponent(aiData.item_original + ' 評價 心得 PTT Dcard')}`;
 
         resDiv.innerHTML = `
@@ -279,7 +308,10 @@
           <h3 style="margin-top:25px;">${btn1Title}</h3>
           
           <div style="display:flex; flex-direction:column; gap:12px; margin-top:10px;">
-            <a href="${aiData.best_link.url}" target="_blank" style="display:block; padding:15px; background-color:#ff5722; color:white; text-decoration:none; border-radius:12px; font-weight:bold; width:100%; box-sizing:border-box; text-align:center; font-size:16px; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
+            <a href="${aiData.best_link.url}" 
+               target="_blank" 
+               onclick="return handleDeepLink(event, '${aiData.best_link.name}', '${aiData.best_link.url}', '${aiData.best_link.keyword}')"
+               style="display:block; padding:15px; background-color:#ff5722; color:white; text-decoration:none; border-radius:12px; font-weight:bold; width:100%; box-sizing:border-box; text-align:center; font-size:16px; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
               ${btn1Text}
             </a>
             
