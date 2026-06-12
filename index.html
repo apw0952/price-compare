@@ -229,7 +229,7 @@
         };
 
         abortController = new AbortController();
-        const timeoutId = setTimeout(() => { if (abortController) abortController.abort(); }, 60000);
+        const timeoutId = setTimeout(() => { if (abortController) abortController.abort(); }, 90000);
 
         const response = await fetch(API_URL, {
           method: 'POST',
