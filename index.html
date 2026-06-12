@@ -256,6 +256,16 @@
 
         let platformsHtml = aiData.platforms.map(p => `<li class="platform-li">${p.emoji} <b>${p.name}</b>: ${p.result}</li>`).join('');
 
+        // 🌟 核心進化：讀取 AI 狀態機訊號，決定按鈕要不要「變身」
+        const isUnknown = (aiData.best_link.name.toLowerCase() === 'unknown' || aiData.best_link.name === '無資料');
+        
+        // 按鈕 1：比價決策鈕 (動態切換)
+        const btn1Title = isUnknown ? '⚠️ 台灣常規無販售' : '🔗 最低價直達車';
+        const btn1Text = isUnknown ? '🔍 一鍵搜尋全球低價' : `👉 前往 ${aiData.best_link.name}`;
+        
+        // 按鈕 2：開放研究鈕 (永遠存在的防護網)
+        const reviewUrl = `https://www.google.com/search?q=${encodeURIComponent(aiData.item_original + ' 評價 心得 PTT Dcard')}`;
+
         resDiv.innerHTML = `
           <h3>💰 核心比價結論</h3>
           <ul>
@@ -265,10 +275,22 @@
           </ul>
           <h3>🛒 指定平台比價結果</h3>
           <ul style="padding-left: 20px;">${platformsHtml}</ul>
-          <h3>🔗 最低價直達車</h3>
-          <a href="${aiData.best_link.url}" target="_blank" style="display:inline-block; padding:10px 15px; background-color:#ff5722; color:white; text-decoration:none; border-radius:8px; font-weight:bold; width:90%; box-sizing:border-box; text-align:center;">👉 前往 ${aiData.best_link.name}</a>
-          <br><small style="color:#888; margin-top:5px; display:block;">(搜尋關鍵字：${aiData.best_link.keyword})</small>
-          <h3>⚠️ 注意事項</h3>
+          
+          <h3 style="margin-top:25px;">${btn1Title}</h3>
+          
+          <div style="display:flex; flex-direction:column; gap:12px; margin-top:10px;">
+            <a href="${aiData.best_link.url}" target="_blank" style="display:block; padding:15px; background-color:#ff5722; color:white; text-decoration:none; border-radius:12px; font-weight:bold; width:100%; box-sizing:border-box; text-align:center; font-size:16px; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
+              ${btn1Text}
+            </a>
+            
+            <a href="${reviewUrl}" target="_blank" style="display:block; padding:15px; background-color:#1a73e8; color:white; text-decoration:none; border-radius:12px; font-weight:bold; width:100%; box-sizing:border-box; text-align:center; font-size:16px; box-shadow:0 4px 6px rgba(0,0,0,0.1);">
+              💬 一鍵查看商品評價與開箱心得
+            </a>
+          </div>
+          
+          ${!isUnknown ? `<small style="color:#888; margin-top:8px; display:block; text-align:center;">(原關鍵字：${aiData.best_link.keyword})</small>` : ''}
+          
+          <h3 style="margin-top:25px;">⚠️ 注意事項</h3>
           <p style="font-size:14px; line-height:1.5;">${aiData.warnings}</p>
           <hr style="border:0; border-top:1px solid #eee; margin:15px 0;">
           <small style="color:#999; display:block; line-height:1.4;">辨識結果：${aiData.item_original}<br>中文名稱：${aiData.item_translated}</small>
